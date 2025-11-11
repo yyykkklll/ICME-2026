@@ -29,7 +29,7 @@
     To obtain high-quality, fine-grained supervision, we first employ MLLM to automatically generate separate identity and clothing descriptions.
     These descriptions then guide our decoupling module, which utilizes bidirectional attention and a gated weighting strategy to meticulously disentangle visual features into identity and clothing subspaces.
     To enforce this separation and ensure identity purity, we design a multi-task loss strategy comprising an alignment loss that actively suppresses the influence of clothing-related features, and a kernel-based orthogonal constraint that ensures statistical independence. Furthermore, we pioneer the integration of the Mamba SSM into cross-modal Re-ID as an efficient fusion module.
-    By leveraging its linear-time complexity and proficiency in modeling long-range dependencies, it facilitates deep contextual interactions across modalities while avoiding the quadratic complexity of Transformers.
+    By leveraging its linear-time complexity and proficiency in modeling long-range dependencies, it facilitates deep contextual interactions across modalities while avoiding the quadratic complexity of Trformers.
     Comprehensive experiments on multiple benchmark datasets reveal that our proposed method achieves superior performance compared to leading contemporary methods, proving its effectiveness and robustness.
 \end{abstract}
 
@@ -57,7 +57,7 @@ To overcome this, subsequent studies introduced feature disentanglement~\cite{ga
 These are broadly explicit, using auxiliary modules for part-alignment~\cite{wangViTAAVisualTextualAttributes2020,dingSemanticallySelfAlignedNetwork2021}, or implicit, using regularizers to associate noun phrases with regions~\cite{jiangCrossModalImplicitRelation2023,shaoLearningGranularityUnifiedRepresentations2022}.
 This progression highlights that distinguishing identity-relevant from irrelevant semantics is essential for advancing T2I-ReID.
 
-\noindent This pursuit of disentanglement has been propelled by powerful backbones. Models employing ViT~\cite{dosovitskiyImageWorth16x162021,tanHarnessingPowerMLLMs2024,yangUnifiedTextbasedPerson2023} capture fine-grained details, while methods leveraging CLIP~\cite{radfordLearningTransferableVisual2021,yaoFILIPFinegrainedInteractive2021,niuLLMLocBootstrapSingleimage2025} learn a well-aligned joint space.
+\noindent This pursuit of disentanglement has been propelled by powerful backbones. Models employing ViT~\cite{dosovitskiyImageWorth16x162021,tanHarnessingPowerMLLMs2024,yangUnifiedTextbasedPerson2023} capture fine-grained details, while methods leveraging CLIP~\cite{yaoFILIPFinegrainedInteractive2021,niuLLMLocBootstrapSingleimage2025} learn a well-aligned joint space.
 Despite these advances, a critical limitation persists: both lines of work commonly treat the textual description holistically.
 This overlooks the semantic distinction between content relevant to identity (e.g., gender, body shape) and content irrelevant to identity (e.g., clothing, hairstyle).
 This coarse-grained treatment forces the model to entangle these factors, often prioritizing salient clothing details over stable identity cues, which blurs identity features and degrades matching robustness.
@@ -155,23 +155,27 @@ HSIC measures the statistical dependence between features by calculating the mea
 By minimizing this value, the loss encourages the features to be statistically independent.
 
 \subsection{Semantic enhancement}
-\noindent We employ an MLLM, as detailed in Section~\ref{sec:experiments}, to automatically generate fine-grained identity and clothing descriptions for pedestrians.
-This approach reduces the burden of manual annotation and enriches the available supervision.
-Prior work, notably HAM~\cite{jiangModelingThousandsHuman2025}, shows that modeling annotator styles can steer an MLLM to produce diverse texts.
+\noindent We employ an MLLM, as detailed in Section~\ref{sec:4.2}, to automatically generate fine-grained identity and clothing descriptions for pedestrians. 
+This approach reduces the burden of manual annotation and enriches the available supervision. 
+Figure~\ref{fig:mllm_pipeline} illustrates this generation pipeline.
+Prior work, notably HAM~\cite{jiangModelingThousandsHuman2025}, shows that modeling annotator styles can steer an MLLM to produce diverse texts. 
 Adapting this core insight, we extend the pipeline to meet our model's design goals.
 
-\noindent We first use the CLIP text encoder to embed the original descriptions into vectors of a fixed dimension. Using prompts, an MLLM generalizes and substitutes entity attributes to emphasize expression style rather than content.
-We then cluster these style embeddings with DBSCAN~\cite{hanafiFastDBSCANAlgorithm2022}, which adaptively discovers dense regions without predefining the cluster count.
-To stabilize the clusters, we reassign noise points and merge small clusters.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{MLLM.pdf}
+    \caption{Overview of the offline pipeline using an MLLM to generate decoupled identity and clothing descriptions. Style prompts are derived via CLIP and DBSCAN to enhance diversity.}
+    \label{fig:mllm_pipeline}
+\end{figure}
+
+\noindent We first use the CLIP text encoder to embed the original descriptions into vectors of a fixed dimension. Using prompts, an MLLM generalizes and substitutes entity attributes to emphasize expression style rather than content. 
+We then cluster these style embeddings with DBSCAN~\cite{hanafiFastDBSCANAlgorithm2022}, which adaptively discovers dense regions without predefining the cluster count. 
+To stabilize the clusters, we reassign noise points and merge small clusters. 
 This setup aligns the learned style categories with the identity and clothing disentanglement expected by BDAM.
 
-\noindent A dual prompt generator guides the MLLM to output two distinct texts per image: one description for identity, covering biological traits, and another for clothing, detailing apparel, colors, and patterns.
-We control the generation process with length and temperature constraints.
+\noindent A dual prompt generator guides the MLLM to output two distinct texts per image: one description for identity, covering biological traits, and another for clothing, detailing apparel, colors, and patterns. 
+We control the generation process with length and temperature constraints. 
 We also apply syntax checks and validation for attribute coverage to ensure the outputs remain grammatical, structured, and parsable.
-
-\noindent In summary, our adaptations deliver flexible style modeling via DBSCAN and a decoupled dual description mechanism.
-This process strengthens the distinctiveness and diversity of identity and clothing semantics.
-The resulting supervision improves data expressiveness and provides richer training signals for BDAM.
 
 \subsection{Feature Fusion}
 \noindent For efficient feature fusion that is sensitive to semantics, we introduce the Mamba SSM.
@@ -252,12 +256,10 @@ The hyperparameter $\alpha$ is used to control the strength of the GradNorm loss
 \subsection{Parameter and Efficiency Analysis}
 \label{sec:param_analysis}
 
-\noindent Gate Weight Analysis. We analyze the learned gate weights to validate our design. The BDAM identity weights ($W_{\mathrm{id}}$) exhibit a mean of $0.61$ ($\sigma=0.17$), significantly exceeding clothing weights ($W_{\mathrm{clothing}}=0.38$) [cite: 299]. This asymmetry confirms that identity-relevant features dominate the representation [cite: 300]. Conversely, the fusion module maintains balanced weights (means of $0.52$ and $0.48$) [cite: 302], indicating stable cross-modal alignment without modality collapse [cite: 303]. Detailed distributions are provided in the supplementary material.
-
-\noindent Efficiency of Mamba Fusion. Our Mamba-based fusion achieves an optimal trade-off between accuracy and efficiency. Compared to a standard 4-layer Transformer, our module delivers comparable retrieval accuracy while significantly reducing parameters and FLOPs [cite: 382, cite: 385]. Against a simple baseline, it demonstrates marked mAP improvements with minimal computational overhead [cite: 386].
+\noindent Gate Weight Analysis. We analyze the learned gate weights to validate our design. The BDAM identity weights ($W_{\mathrm{id}}$) exhibit a mean of $0.61$ ($\sigma=0.17$), significantly exceeding clothing weights ($W_{\mathrm{clothing}}=0.38$). This asymmetry confirms that identity-relevant features dominate the representation. Conversely, the fusion module maintains balanced weights (means of $0.52$ and $0.48$) indicating stable cross-modal alignment without modality collapse. Detailed distributions are provided in the supplementary material.
 
 \subsection{Ablation Study}
-We conduct systematic ablation studies on CUHK-PEDES to validate each component [cite: 307].
+We conduct systematic ablation studies on CUHK-PEDES to validate each component.
 
 \begin{table}[htbp]
     \centering
@@ -280,7 +282,8 @@ We conduct systematic ablation studies on CUHK-PEDES to validate each component 
     \vspace{-0.2cm}
 \end{table}
 
-\noindent Disentanglement Module. Table~\ref{tab:ablation_bdam} shows that BDAM yields substantial gains [cite: 308]. Removing cross-attention, ablating the gating mechanism, or reducing depth all degrade performance, confirming that semantic interaction and adaptive control are essential for robust disentanglement [cite: 313-314].
+\noindent Disentanglement Module. Table~\ref{tab:ablation_bdam} shows that BDAM yields substantial gains. 
+Removing cross-attention, ablating the gating mechanism, or reducing depth all degrade performance, confirming that semantic interaction and adaptive control are essential for robust disentanglement.
 
 \begin{table}[htbp]
     \centering
@@ -303,7 +306,7 @@ We conduct systematic ablation studies on CUHK-PEDES to validate each component 
     \vspace{-0.2cm}
 \end{table}
 
-\noindent Fusion Module. Table~\ref{tab:ablation_fusion} confirms the synergy of our fusion components. The Mamba SSM is critical; its removal causes the largest drop [cite: 344-345], highlighting the value of long-range dependency modeling. The gating and alignment layers provide further essential gains [cite: 346-347].
+\noindent Fusion Module. Table~\ref{tab:ablation_fusion} confirms the synergy of our fusion components. The Mamba SSM is critical; its removal causes the largest drop, highlighting the value of long-range dependency modeling. The gating and alignment layers provide further essential gains.
 
 \begin{table}[htbp]
     \centering
@@ -328,7 +331,7 @@ We conduct systematic ablation studies on CUHK-PEDES to validate each component 
     \vspace{-0.2cm}
 \end{table}
 
-\noindent Loss and Prompting. Table~\ref{tab:ablation_loss} validates our multi-task loss. InfoNCE [cite: 362] and triplet losses [cite: 363] are foundational. Crucially, the degradation without alignment [cite: 364] or HSIC decoupling losses [cite: 365] proves that explicit constraints are necessary to enforce identity-clothing separation. For prompt generation, we found density-based clustering (DBSCAN) significantly outperforms K-Means and random sampling, as it adaptively handles irregular style distributions [cite: 353-354]. Full clustering results and t-SNE visualizations are in the supplementary material.
+\noindent Loss and Prompting. Table~\ref{tab:ablation_loss} validates our multi-task loss. InfoNCE and triplet losses are foundational. Crucially, the degradation without alignment or HSIC decoupling losses proves that explicit constraints are necessary to enforce identity-clothing separation. For prompt generation, we found density-based clustering (DBSCAN) significantly outperforms K-Me and random sampling, as it adaptively handles irregular style distributions. Full clustering results and t-SNE visualizations are in the supplementary material.
 
 \subsection{Comparisons with State-of-the-Art Methods}
 \begin{table*}[t]

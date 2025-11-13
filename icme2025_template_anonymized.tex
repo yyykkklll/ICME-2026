@@ -11,7 +11,6 @@
 \usepackage{multirow}
 \usepackage{hhline}
 \usepackage{booktabs}
-\usepackage{cleveref}
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
@@ -23,68 +22,63 @@
 \maketitle
 
 \begin{abstract}
-    Text-to-Image Person Re-Identification is critically hampered by the difficulty of fine-grained semantic alignment, as retrieval accuracy is degraded by clothing-induced interference and a persistent modality gap.
-    In this paper, we propose a novel framework to resolve this issue, centered on feature decoupling guided by a Multimodal Large Language Model (MLLM).
-    Our framework introduces two core components: a Bidirectional Decoupled Alignment Module and a Mamba State Space Model (SSM) for efficient fusion.
-    To obtain high-quality, fine-grained supervision, we first employ MLLM to automatically generate separate identity and clothing descriptions.
-    These descriptions then guide our decoupling module, which utilizes bidirectional attention and a gated weighting strategy to meticulously disentangle visual features into identity and clothing subspaces.
-    To enforce this separation and ensure identity purity, we design a multi-task loss strategy comprising an alignment loss that actively suppresses the influence of clothing-related features, and a kernel-based orthogonal constraint that ensures statistical independence. Furthermore, we pioneer the integration of the Mamba SSM into cross-modal Re-ID as an efficient fusion module.
-    By leveraging its linear-time complexity and proficiency in modeling long-range dependencies, it facilitates deep contextual interactions across modalities while avoiding the quadratic complexity of Trformers.
-    Comprehensive experiments on multiple benchmark datasets reveal that our proposed method achieves superior performance compared to leading contemporary methods, proving its effectiveness and robustness.
+    Text-to-Image Person Re-Identification is critically hampered by clothing-induced interference and a persistent modality gap.
+    We propose a novel framework centered on feature decoupling guided by a Multimodal Large Language Model.
+    We first employ this model to automatically generate separate identity and clothing descriptions for fine-grained supervision.
+    These descriptions guide our core component, the Bidirectional Decoupled Alignment Module, which disentangles visual features into identity and clothing subspaces.
+    A multi-task loss strategy, comprising an alignment loss and a kernel-based orthogonal constraint, enforces this separation.
+    Furthermore, we pioneer the integration of the Mamba state space model as an efficient fusion module, leveraging its linear-time complexity to model long-range dependencies.
+    Comprehensive experiments on benchmark datasets demonstrate our method's superior performance and robustness.
 \end{abstract}
+
 
 \begin{IEEEkeywords}%
     Multimodal Learning, Text-to-Image Re-Identification, Feature Decoupling, Semantic Supervision.
 \end{IEEEkeywords}
 
-% --- 正文 ---
 \section{Introduction}
-\label{sec:intro}
+Text-to-Image Person Re-Identification (T2I-ReID) retrieves a target pedestrian from a large-scale image gallery given a natural-language description~\cite{dingSemanticallySelfAlignedNetwork2021}.
+It is valuable for video surveillance~\cite{bukhariLanguageVisionBased2023}, intelligent security~\cite{galiyawalaPersonRetrievalSurveillance2021}, public safety, and social media.
+Despite recent progress, practical deployment remains challenging due to image factors (pose, viewpoint, illumination) obscuring identity cues and a persistent modality gap hampering fusion.
+These issues are exacerbated at the fine-grained level, where semantic alignment is particularly difficult.
+
+A core challenge in T2I-ReID is the semantic gap between images and text.
+Early work attempted to reduce this discrepancy by projecting global visual and textual features into a shared space~\cite{wangLearningDeepStructurePreserving2016}, but struggled with high intra-class and low inter-class variance.
+To overcome this, subsequent studies introduced feature disentanglement~\cite{gaoContextualNonLocalAlignment2021}.
+These are broadly explicit, using auxiliary modules for part-alignment~\cite{wangViTAAVisualTextualAttributes2020}, or implicit, using regularizers to associate noun phrases with regions~\cite{jiangCrossModalImplicitRelation2023}.
+This progression highlights that distinguishing identity-relevant from irrelevant semantics is essential for advancing T2I-ReID.
+
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=\columnwidth]{Figure1}
     \caption{Comparison of ReID methods. (a) Traditional: Direct fusion of image and text features without distinguishing identity from non-identity information limits alignment. (b) Proposed (BDAM): Introduces a decoupling module that aligns separated identity/clothing features with MLLM-generated descriptions for fine-grained matching.}
     \label{fig:figure1}
 \end{figure}
-\noindent Text-to-Image Person Re-Identification (T2I-ReID) retrieves a target pedestrian from a large-scale image gallery given a natural-language description~\cite{shaoLearningGranularityUnifiedRepresentations2022, dingSemanticallySelfAlignedNetwork2021}.
-It is valuable for video surveillance~\cite{bukhariLanguageVisionBased2023}, intelligent security~\cite{galiyawalaPersonRetrievalSurveillance2021}, public safety, and social media.
-Despite recent progress, practical deployment remains challenging due to image factors (pose, viewpoint, illumination) obscuring identity cues and a persistent modality gap hampering fusion.
-These issues are exacerbated at the fine-grained level, where semantic alignment is particularly difficult.
 
-\noindent A core challenge in T2I-ReID is the semantic gap between images and text.
-Early work attempted to reduce this discrepancy by projecting global visual and textual features into a shared space~\cite{wangLearningDeepStructurePreserving2016,wangLanguagePersonSearch2019}, but struggled with high intra-class and low inter-class variance.
-To overcome this, subsequent studies introduced feature disentanglement~\cite{gaoContextualNonLocalAlignment2021,wangCAIBCCapturingAllround2022}.
-These are broadly explicit, using auxiliary modules for part-alignment~\cite{wangViTAAVisualTextualAttributes2020,dingSemanticallySelfAlignedNetwork2021}, or implicit, using regularizers to associate noun phrases with regions~\cite{jiangCrossModalImplicitRelation2023,shaoLearningGranularityUnifiedRepresentations2022}.
-This progression highlights that distinguishing identity-relevant from irrelevant semantics is essential for advancing T2I-ReID.
-
-\noindent This pursuit of disentanglement has been propelled by powerful backbones. Models employing ViT~\cite{dosovitskiyImageWorth16x162021,tanHarnessingPowerMLLMs2024,yangUnifiedTextbasedPerson2023} capture fine-grained details, while methods leveraging CLIP~\cite{yaoFILIPFinegrainedInteractive2021,niuLLMLocBootstrapSingleimage2025} learn a well-aligned joint space.
+This pursuit of disentanglement has been propelled by powerful backbones. Models employing ViT~\cite{dosovitskiyImageWorth16x162021} capture fine-grained details, while methods leveraging CLIP~\cite{yaoFILIPFinegrainedInteractive2021} learn a well-aligned joint space.
 Despite these advances, a critical limitation persists: both lines of work commonly treat the textual description holistically.
 This overlooks the semantic distinction between content relevant to identity (e.g., gender, body shape) and content irrelevant to identity (e.g., clothing, hairstyle).
 This coarse-grained treatment forces the model to entangle these factors, often prioritizing salient clothing details over stable identity cues, which blurs identity features and degrades matching robustness.
 
-\noindent To address this challenge, we propose a novel framework with explicit, fine-grained semantic supervision.
-Inspired by the style-clustering paradigm~\cite{jiangModelingThousandsHuman2025}, our approach employs MLLM to guide feature decoupling by automatically generating distinct descriptions for identity and clothing.
-These decoupled annotations provide precise supervision for our BDAM to meticulously separate and align identity and clothing information.
+To address this challenge, we propose a novel framework with explicit, fine-grained semantic supervision.
+Inspired by the style-clustering paradigm~\cite{jiangModelingThousandsHuman2025}, our approach employs Multimodal Large Language Model (MLLM) to guide feature decoupling by automatically generating distinct descriptions for identity and clothing.
+These decoupled annotations provide precise supervision for our Bidirectional Decoupled Alignment Module (BDAM) to meticulously separate and align identity and clothing information.
 This separation is enforced by a multi-task loss strategy, including an alignment loss and an HSIC-based orthogonality constraint.
-Furthermore, we pioneer the integration of the Mamba SSM as an efficient fusion module, adept at capturing long-range cross-modal dependencies with linear complexity.
+Furthermore, we pioneer the integration of the Mamba state space model (SSM) as an efficient fusion module, adept at capturing long-range cross-modal dependencies with linear complexity.
 
-\noindent Our main contributions are threefold: (1) An automatic prompt construction pipeline that combines style clustering with an MLLM to produce fine-grained, decoupled identity and clothing descriptions;
+Our main contributions are threefold: (1) An automatic prompt construction pipeline that combines style clustering with an MLLM to produce fine-grained, decoupled identity and clothing descriptions;
 (2) The BDAM, which achieves precise decoupling and alignment reinforced by a multi-task loss strategy combining an alignment loss and an orthogonality constraint based on HSIC;
 and (3) The novel integration of a Mamba SSM fusion module that models long-range cross-modal dependencies with linear complexity.
 
 \section{Related Work}
-\subsection{Feature Disentanglement}
-\noindent Feature disentanglement aims to separate semantically distinct factors~\cite{wangDisentangledRepresentationLearning2024}. Strategies include adversarial training~\cite{liuMultitaskAdversarialNetwork2018}, metric learning~\cite{chengDisentangledFeatureRepresentation2021}, and orthogonal projections~\cite{materzynskaDisentanglingVisualWritten2022}. In the ReID domain, this is used to separate identity signals from nuisances~\cite{liDisentanglingIdentityFeatures2024,azadActivityBiometricsPersonIdentification2024}, such as countering clothing changes~\cite{liDisentanglingIdentityFeatures2024}.
+\textbf{Feature Disentanglement.}
+Prior work in ReID~\cite{liDisentanglingIdentityFeatures2024} often relies on implicit regularizers or external detectors, which limits scalability and can lead to spurious separations. Our framework addresses this by pairing model-level disentanglement with explicit semantic supervision from MLLM-generated descriptions, ensuring controllable separation.
 
-\noindent While these efforts improve semantic purity, critical limitations persist. Without effective interaction, isolated factors can lead to brittle alignment. Furthermore, reliance on manual annotations or external detectors constrains scalability, and implicit regularizers can yield spurious separations on unseen data. Our framework addresses this by pairing model-level disentanglement with explicit supervision from MLLM-generated descriptions, ensuring controllable separation while preserving cross-modal synergy.
+\textbf{Feature Fusion.}
+Existing fusion approaches are often hindered by the quadratic complexity of Transformers~\cite{yinGraFTGradualFusion2023} or the holistic, cue-blurring nature of CLIP~\cite{schmidtRobustCanonicalizationBootstrapped2025}. This motivates our design: our BDAM supplies factor-aware representations, which are then efficiently modeled by a Mamba SSM fusion module that captures long-range dependencies with linear complexity.
 
-\subsection{Feature Fusion}
-\noindent Feature fusion is central to T2I-ReID, often relying on Transformers or CLIP~\cite{schmidtRobustCanonicalizationBootstrapped2025}. However, Transformers built on multi-head attention suffer from quadratic complexity in sequence length~\cite{yinGraFTGradualFusion2023}. Pipelines built upon CLIP~\cite{kimExtendingCLIPImageText2024} benefit from pretraining but their global pooling and holistic processing often blur identity versus clothing cues. Other approaches like dynamic fusion~\cite{fengKnowledgeGuidedDynamicModality2024} or graph-based models~\cite{li2019graph} introduce trade-offs in computational cost or adaptability.
-
-\noindent Contemporary evidence suggests that accuracy improves only when semantic disentanglement and efficient fusion advance in tandem. An ideal fusion module should respect factorized semantics (i.e., identity and clothing), capture long-range dependencies, and scale with linear or near-linear complexity. This motivates our design: BDAM supplies factor-aware representations, while a Mamba SSM fusion module models long-horizon interactions with linear complexity, enabling precise alignment without the memory and efficiency bottlenecks of standard Transformers.
 \section{Method}
 \label{sec:method}
-
 \begin{figure*}[ht]
     \centering
     \includegraphics[width=\textwidth]{figure2_2_2.pdf}
@@ -97,31 +91,26 @@ and (3) The novel integration of a Mamba SSM fusion module that models long-rang
 \end{figure*}
 
 \subsection{Overview}
-\noindent To learn pedestrian representations robust to variations in clothing, pose, and environment, this paper proposes the BDAM.
-This module disentangles and extracts robust features via contrastive and supervised learning, guided by encoded textual features.
-As illustrated in \cref{fig:figure2}, our framework comprises two primary feature extraction modules for vision and text, our core BDAM, and an efficient Mamba SSM Fusion Module.
-
-\noindent Specifically, given a pedestrian image $I \in \mathbb{R}^{B \times C \times H \times W}$, a visual encoder first extracts image features $f_i$.
-To obtain semantic guidance, we use an MLLM with pre-designed prompts to generate corresponding descriptions for identity and clothing.
-A text encoder subsequently encodes these into $f^t_{\mathrm{id}}$ and $f^t_{\mathrm{clo}}$.
-During disentanglement, BDAM leverages these textual features to guide the image feature learning process.
-To ensure the quality of this separation, we introduce a loss based on HSIC to constrain the two resulting feature types towards orthogonality.
-We also employ an alignment clothing loss, denoted as $\mathcal{L}_{\mathrm{aln}}$, to supervise the learning of visual clothing features using clothing descriptions.
-Finally, to achieve a deep fusion of visual identity and textual semantics, we introduce the Mamba SSM as a fusion module.
-It dynamically models and facilitates interaction among the disentangled multimodal features, enhancing the model's overall representation capability.
+To learn robust pedestrian representations, we propose the BDAM, which disentangles features using textual guidance.
+As illustrated in Fig.~\ref{fig:figure2}, our framework comprises vision and text encoders, the core BDAM, and an efficient Mamba SSM Fusion Module.
+Given an image $I \in \mathbb{R}^{B \times C \times H \times W}$, a visual encoder extracts features $f_i$.
+Concurrently, we use an MLLM to generate separate identity and clothing descriptions, which a text encoder encodes into $f^t_{\mathrm{id}}$ and $f^t_{\mathrm{clo}}$.
+The BDAM leverages these textual features to guide the disentanglement of $f_i$.
+To enforce this separation, we employ two losses: an alignment loss ($\mathcal{L}_{\mathrm{aln}}$) to supervise the visual clothing features using clothing descriptions, and an HSIC-based loss to ensure orthogonality.
+Finally, the Mamba SSM efficiently fuses the disentangled visual identity and textual semantics, enhancing the model's overall representation.
 
 \subsection{Bidirectional Decoupled Alignment Module}
-\noindent Some studies directly adopt CLIP~\cite{radfordLearningTransferableVisual2021} as a feature extractor for both modalities, aligning global embeddings for retrieval or discrimination.
+Some studies directly adopt CLIP~\cite{radfordLearningTransferableVisual2021} as a feature extractor for both modalities, aligning global embeddings for retrieval or discrimination.
 However, this approach presents two key limitations.
 First, its limited capacity for fine-grained semantics hinders the separation of identity from clothing.
 Second, its holistic encoding of images and text lacks the modeling of cross-modal structure at the token level, which reduces robustness in complex scenes.
 
-\noindent In this paper, we use a pre-trained ViT (ViT-B/16) as the visual encoder $E_v$~\cite{dosovitskiyImageWorth16x162021}.
+In this paper, we use a pre-trained ViT (ViT-B/16) as the visual encoder $E_v$~\cite{dosovitskiyImageWorth16x162021}.
 Given an image $I_i$, $E_v$ outputs token features $f_i \in \mathbb{R}^{B \times L \times D}$ that entangle cues relevant to identity and cues irrelevant to identity.
 A linear projection with two branches then yields preliminary identity features $f_{\text{id}}' \in \mathbb{R}^{B \times L \times D}$ and clothing features $f_{\text{clo}}' \in \mathbb{R}^{B \times L \times D}$.
 These are followed by multi-layer self-attention in each branch to enhance local consistency and contextual awareness.
 
-\noindent Instead of using the ViT [CLS] token as a global descriptor, we exploit the full patch sequence and introduce cross-attention between the branches to exchange information.
+Instead of using the ViT [CLS] token as a global descriptor, we exploit the full patch sequence and introduce cross-attention between the branches to exchange information.
 In the identity stream, the clothing stream provides auxiliary context, and vice versa, reinforcing semantic distinctions.
 Each stream then applies global average pooling to produce $\hat{f}_\text{id}$ and $\hat{f}_\text{clo}$.
 To enable soft disentanglement that is adaptive to the input, we design a gating mechanism.
@@ -130,7 +119,7 @@ We obtain the final gated features $f_{\mathrm{id}}^{i}=g\odot \hat{f}_{\mathrm{
 This weighting at the dimension level provides a fine degree of control;
 $f_{\mathrm{id}}^{i}$ is further sent to the fusion module.
 
-\noindent To train BDAM and enforce separation, we introduce two specialized loss functions.
+To train BDAM and enforce separation, we introduce two specialized loss functions.
 The first is a clothing alignment loss, and the second is a decoupling loss based on HSIC to enforce independence between identity and clothing.
 The clothing alignment loss supervises the visual clothing features with the MLLM-generated clothing descriptions, ensuring that the model accurately captures clothing semantics:
 \begin{equation} \label{eq:aln}
@@ -141,24 +130,24 @@ In practice, clothing features are linearly projected to the text dimension and 
 This alignment objective explicitly ensures the clothing stream learns accurate representations under semantic supervision, which indirectly enhances the purity of the identity features by providing clear guidance on what constitutes clothing information.
 This works in conjunction with the cross-attention mechanism described earlier, which implicitly sharpens the separation via interaction.
 
-\noindent To further encourage statistical independence, we minimize a decoupling loss based on HSIC:
-\begin{equation}
-    \begin{split}
-        \mathcal{L}_{\mathrm{Decouple}} & = \mathrm{HSIC}(f_{\mathrm{id}}^{i}, f_{\mathrm{clo}}^{i})            \\
-                                        & = \frac{1}{(N-1)^2} \mathrm{tr}(K_{\mathrm{id}} H K_{\mathrm{clo}} H)
-    \end{split}
-\end{equation}
-Here, $f_{\mathrm{id}}^{\mathrm{i}} \in \mathbb{R}^{B \times D}$ and $f_{\mathrm{clo}}^{\mathrm{i}} \in \mathbb{R}^{B \times D}$ are the gated identity and clothing features, respectively.
+To further encourage statistical independence, we minimize a decoupling loss based on HSIC:
+\begin{IEEEeqnarray}{rCl}
+    \mathcal{L}_{\mathrm{Decouple}} & = & \mathrm{HSIC}(f_{\mathrm{id}}^{i}, f_{\mathrm{clo}}^{i}) \nonumber \\
+    & = & \frac{1}{(N-1)^2} \mathrm{tr}(K_{\mathrm{id}} H K_{\mathrm{clo}} H)
+    \label{eq:decouple}
+\end{IEEEeqnarray}
+Here, $f_{\mathrm{id}}^{\mathrm{i}} \in \mathbb{R}^{B \times D}$ and $f_{\mathrm{clo}}^{\mathrm{i}} \in \mathbb{R}{B \times D}$ are the gated identity and clothing features, respectively.
 $K_{\mathrm{id}} = f_{\mathrm{id}}^{\mathrm{i}} (f_{\mathrm{id}}^{\mathrm{i}})^{T}$ and $K_{\mathrm{clo}} = f_{\mathrm{clo}}^{\mathrm{i}} (f_{\mathrm{clo}}^{\mathrm{i}})^{T}$ are their respective kernel matrices.
 $H = I_{N} - (1/N) \mathbf{1}_{N} \mathbf{1}_{N}^{T}$ is the centering matrix, where $I_{N}$ is the $N$-dimensional identity matrix and $\mathbf{1}_{N}$ is a column vector of all ones.
 HSIC measures the statistical dependence between features by calculating the mean trace of the product of their kernel matrices and the centering matrix.
 By minimizing this value, the loss encourages the features to be statistically independent.
 
-\subsection{Semantic enhancement}
-\noindent We employ an MLLM, as detailed in Section~\ref{sec:4.2}, to automatically generate fine-grained identity and clothing descriptions for pedestrians. 
-This approach reduces the burden of manual annotation and enriches the available supervision. 
-Figure~\ref{fig:mllm_pipeline} illustrates this generation pipeline.
-Prior work, notably HAM~\cite{jiangModelingThousandsHuman2025}, shows that modeling annotator styles can steer an MLLM to produce diverse texts. 
+\subsection{Semantic Enhancement}
+\label{sec:semantic}
+We employ an MLLM to automatically generate fine-grained identity and clothing descriptions for pedestrians.
+This approach reduces the burden of manual annotation and enriches the available supervision.
+Fig.~\ref{fig:mllm_pipeline} illustrates this generation pipeline.
+Prior work, notably HAM~\cite{jiangModelingThousandsHuman2025}, shows that modeling annotator styles can steer an MLLM to produce diverse texts.
 Adapting this core insight, we extend the pipeline to meet our model's design goals.
 
 \begin{figure}[ht]
@@ -168,17 +157,18 @@ Adapting this core insight, we extend the pipeline to meet our model's design go
     \label{fig:mllm_pipeline}
 \end{figure}
 
-\noindent We first use the CLIP text encoder to embed the original descriptions into vectors of a fixed dimension. Using prompts, an MLLM generalizes and substitutes entity attributes to emphasize expression style rather than content. 
-We then cluster these style embeddings with DBSCAN~\cite{hanafiFastDBSCANAlgorithm2022}, which adaptively discovers dense regions without predefining the cluster count. 
-To stabilize the clusters, we reassign noise points and merge small clusters. 
+We first use the CLIP text encoder to embed the original descriptions into vectors of a fixed dimension. Using prompts, an MLLM generalizes and substitutes entity attributes to emphasize expression style rather than content.
+We then cluster these style embeddings with DBSCAN, which adaptively discovers dense regions without predefining the cluster count.
+To stabilize the clusters, we reassign noise points and merge small clusters.
+These discovered style categories are then used to formulate textual prompts, such as "Use a very detailed, descriptive style," which guide the MLLM's generation tone.
 This setup aligns the learned style categories with the identity and clothing disentanglement expected by BDAM.
 
-\noindent A dual prompt generator guides the MLLM to output two distinct texts per image: one description for identity, covering biological traits, and another for clothing, detailing apparel, colors, and patterns. 
-We control the generation process with length and temperature constraints. 
+A dual prompt generator, using content-specific templates (e.g., "Describe the person's identity" and "Describe the person's clothing"), guides the MLLM to output two distinct texts per image: one description for identity, covering biological traits, and another for clothing, detailing apparel, colors, and patterns.
+We control the generation process with length and temperature constraints.
 We also apply syntax checks and validation for attribute coverage to ensure the outputs remain grammatical, structured, and parsable.
 
 \subsection{Feature Fusion}
-\noindent For efficient feature fusion that is sensitive to semantics, we introduce the Mamba SSM.
+For efficient feature fusion that is sensitive to semantics, we introduce the Mamba SSM.
 The core objective is to preserve the semantic integrity of the purified identity features from both image and text, enabling a fusion that is robust to clothing variations previously isolated by the BDAM.
 The process begins with an FFN performing dimensional alignment to mitigate distributional discrepancies between modalities.
 It processes the decoupled visual features $f_{\text{id}}^{\text{i}}$ and the textual features $f_{\text{id}}^{t}$ to generate aligned features, $f_{\text{img}}$ and $f_{\text{txt}}$.
@@ -186,14 +176,15 @@ Notably, the decoupled visual clothing feature $f_{\text{clo}}^{\text{i}}$ is \t
 This design is central to our goal: the BDAM, supervised by $\mathcal{L}_{\text{aln}}$ and $\mathcal{L}_{\text{Decouple}}$, is tasked with purging information irrelevant to identity into $f_{\text{clo}}^{\text{i}}$.
 By excluding this feature from the final fusion, the model is forced to learn a representation based purely on stable identity semantics.
 
-\noindent Following this alignment, a gating mechanism achieves dynamic weighted fusion.
+Following this alignment, a gating mechanism achieves dynamic weighted fusion.
 It outputs a weight vector $g_{\mathrm{fus}} \in \mathbb{R}^{B \times 2}$, which is normalized via a SoftMax layer to produce image $W_{\mathrm{img}}$ and text $W_{\mathrm{txt}}$ weights, satisfying $W_{\mathrm{img}} + W_{\mathrm{txt}} = 1$.
 The resulting fusion is computed as: $f_{\mathrm{fusion}} = W_{\mathrm{img}} \cdot f_{\mathrm{img}} + W_{\mathrm{txt}} \cdot f_{\mathrm{txt}}$.
 This mechanism allows the model to adaptively balance modal contributions based on context.
 This fusion gate is distinct from the one in the disentanglement module;
-it outputs a global, two-dimensional weight vector $g_{\mathrm{fus}} \in \mathbb{R}^{B \times 2}$ for the modalities, whereas the disentanglement gate provides a vector $g \in \mathbb{R}^{B \times D}$ for feature control at the dimension level.
+it outputs a global, two-dimensional weight vector $g_{\mathrm{fus}} \in \mathbb{R}^{B \times 2}$ for the modalities,
+whereas the disentanglement gate provides a vector $g \in \mathbb{R}^{B \times D}$ for feature control at the dimension level.
 
-\noindent The resulting $f_{\mathrm{fusion}}$ features are then processed by the Mamba SSM to enhance interaction between modalities.
+The resulting $f_{\mathrm{fusion}}$ features are then processed by the Mamba SSM to enhance interaction between modalities.
 Leveraging its capability to model dependencies over long ranges, Mamba effectively captures complex sequential relationships.
 We employ a stack of Mamba layers, where each layer updates its input $f_{\mathrm{fusion}}^{(l)}$ using a residual connection: $f_{\mathrm{fusion}}^{(l+1)} = \mathrm{Mamba}(f_{\mathrm{fusion}}^{(l)}) + f_{\mathrm{fusion}}^{(l)}$.
 This structure mitigates the vanishing gradient problem and improves information flow.
@@ -201,19 +192,19 @@ Finally, the output from the last Mamba layer is projected to produce the final 
 The resulting feature is highly adaptive in its modal weighting and benefits from Mamba's semantic modeling, providing robust support for downstream tasks like person re-identification.
 
 \subsection{Loss Function}
-\noindent To achieve alignment between modalities at a fine-grained level, we adopt the InfoNCE loss.
+To achieve alignment between modalities at a fine-grained level, we adopt the InfoNCE loss.
 This loss maximizes similarity for positive image and text pairs (representing the same identity) while separating negatives. It is defined as:
 \begin{equation}
     \label{eq:info}
     \mathcal{L}_{\mathrm{info}} = -\log \frac{\exp(v_i^{\top} t_i / \tau)}{\sum_j \exp(v_i^{\top} t_j / \tau)}
 \end{equation}
 
-\noindent Here, $v_i$ is the final fused representation, normalized using the L2 norm;
+Here, $v_i$ is the final fused representation, normalized using the L2 norm;
 $t_i$ is the text feature for the $i$-th identity;
 and $\tau$ controls distribution sharpness.
 Negatives within the batch help reduce the semantic gap between modalities and promote alignment in a shared space.
 
-\noindent To enhance identity discrimination within a single modality, we include a triplet loss.
+To enhance identity discrimination within a single modality, we include a triplet loss.
 This loss enforces compactness within classes and separation between classes:
 \begin{equation}
     \label{eq:triplet}
@@ -223,15 +214,17 @@ Here, $f_a,f_p,f_n$ are decoupled visual identity features of the anchor, positi
 $\left\|\cdot\right\|_2$ denotes the L2 norm;
 and $m$ is the margin parameter used to enforce a minimum distance gap between positive and negative pairs.
 
-\noindent In training with multiple tasks, differing loss scales can cause one task to dominate.
+In training with multiple tasks, differing loss scales can cause one task to dominate.
 We adopt GradNorm to balance the training process by dynamically adjusting the gradient norm of each task:
-\begin{equation} \label{eq:gradnorm} \mathcal{L}_{\mathrm{GradNorm}} = \sum_k \left| \nabla_{\theta} (w_k \mathcal{L}_k) - \tilde{r}_k G_{\mathrm{ref}} \right| \end{equation}
+\begin{equation} \label{eq:gradnorm} 
+\mathcal{L}_{\mathrm{GradNorm}} = \sum_k \left| \nabla_{\theta} (w_k \mathcal{L}_k) - \tilde{r}_k G_{\mathrm{ref}} \right| 
+\end{equation}
 Here, $\nabla_{\theta} (w_k \mathcal{L}_k)$ represents the gradient of the weighted loss of task $k$, $w_k \mathcal{L}_k$, with respect to the shared parameters $\theta$.
 The term $\left|\cdot\right|_1$ denotes the L1 norm, which emphasizes a linear penalty on the deviation.
 $\tilde{r}_k = (\mathcal{L}_k / \mathcal{L}_k^0) / \bar{r}$ is the normalized loss ratio, where $\mathcal{L}_k^0$ is the initial loss of task $k$ at the start of training, serving as a baseline, and $\bar{r}$ is the average of the loss ratios over all tasks.
 $G_{\mathrm{ref}}$ is a reference gradient norm, typically set to the gradient norm of the first task, $\left|\left|\nabla_{\theta}(w_1\mathcal{L}_1)\right|\right|$.
 
-\noindent This mechanism enforces a gradient balance among tasks during training by minimizing the L1 deviation between the actual gradient norm and a target value, $\tilde{r}_k G_{\mathrm{ref}}$.
+This mechanism enforces a gradient balance among tasks during training by minimizing the L1 deviation between the actual gradient norm and a target value, $\tilde{r}_k G_{\mathrm{ref}}$.
 Furthermore, to prevent instability caused by the abnormal scaling of task weights $w_k$, we add a regularization term, $\lambda \sum_k (\log w_k)^2$, to the total loss.
 This term effectively suppresses large discrepancies among the task weights by penalizing the square of their logarithms, thereby improving training stability.
 Finally, the overall loss function is defined as follows:
@@ -244,19 +237,90 @@ The hyperparameter $\alpha$ is used to control the strength of the GradNorm loss
 
 \section{Experiments}
 \label{sec:experiments}
+\begin{table*}[t]
+    \centering
+    \caption{Performance comparison with state-of-the-art methods on three benchmark datasets.}
+    \label{tab:sota_comparison}
+    \vspace{-0.3cm}
+    \resizebox{\textwidth}{!}{
+        \renewcommand{\arraystretch}{1.2}
+        \begin{tabular}{l|c|cccc|cccc|cccc}
+            \hline
+            \multirow{2}{*}{\textbf{Method}}
+                                                                        & \multirow{2}{*}{\textbf{Backbone}}
+                                                                        & \multicolumn{4}{c|}{\textbf{CUHK-PEDES}}
+                                                                        & \multicolumn{4}{c|}{\textbf{ICFG-PEDES}}
+                                                                        & \multicolumn{4}{c}{\textbf{RSTPReid}}                                                                                                                              \\
+            \cline{3-6} \cline{7-10} \cline{11-14}
+                                                                        &                                          & \textbf{R-1}   & \textbf{R-5}   & \textbf{R-10}  & \textbf{mAP}
+                                                                        & \textbf{R-1}                             & \textbf{R-5}   & \textbf{R-10}  & \textbf{mAP}
+                                                                        & \textbf{R-1}                             & \textbf{R-5}   & \textbf{R-10}  & \textbf{mAP}                                                                          \\
+            \hline
+            \multicolumn{14}{l}{\quad\small\textit{Methods with CLIP backbone:}}                                                                                                                                                             \\
+            \hline
+            IRRA~\cite{jiangCrossModalImplicitRelation2023}             & CLIP-ViT
+                                                                        & 73.38                                    & 89.93          & 93.71          & 66.10          & 63.36        & 80.82 & 85.82 & 38.06 & 60.20 & 81.30 & 88.20 & 47.17 \\
+            IRLT~\cite{liuCausalityInspiredInvariantRepresentation2024} & CLIP-ViT
+                                                                        & 73.67                                    & 89.71          & 93.57          & 65.94          & 63.57        & 80.57 & 86.32 & 38.34 & 60.51 & 82.85 & 89.71 & 47.64 \\
+            CFAM~\cite{zuoUFineBenchTowardsTextbased2024}               & CLIP-ViT
+                                                                        & 74.46                                    & 90.19          & 94.01          & -              & 64.72        & 81.35 & 86.31 & -     & 61.49 & 82.26 & 89.23 & -     \\
+            Propot~\cite{yanPrototypicalPromptingTexttoimage2024}       & CLIP-ViT
+                                                                        & 74.89                                    & 89.90          & 94.17          & 67.12          & 65.12        & 81.57 & 86.97 & 42.93 & 61.87 & 83.63 & 89.70 & 47.82 \\
+            RDE~\cite{qinNoisyCorrespondenceLearningTexttoImage2024}    & CLIP-ViT
+                                                                        & 75.94                                    & 90.14          & 94.12          & 67.56          & 67.68        & 82.47 & 87.36 & 40.06 & 65.35 & 83.95 & 89.90 & 50.88 \\
+            HAM~\cite{jiangModelingThousandsHuman2025}                  & CLIP-ViT
+                                                                        & 77.99                                    & 91.34          & 95.03          & 69.72          & 69.95        & 83.88 & 88.39 & 42.72 & 72.50 & 87.70 & 91.95 & 55.47 \\
+            \hline
+            \multicolumn{14}{l}{\quad\small\textit{Methods with ViT backbone:}}                                                                                                                                                              \\
+            \hline
+            CPCL~\cite{zhengCPCLCrossModalPrototypical2024}             & ViT
+                                                                        & 70.03                                    & 87.28          & 91.78          & 63.19          & 62.60        & 79.07 & 84.46 & 36.16 & 58.35 & 81.05 & 87.65 & 45.81 \\
+            PDReid~\cite{liPromptDecouplingTexttoImage2024}             & ViT
+                                                                        & 71.59                                    & 87.95          & 92.45          & 65.03          & 60.93        & 77.96 & 84.11 & 36.44 & 56.65 & 77.40 & 84.70 & 45.27 \\
+            SSAN~\cite{dingSemanticallySelfAlignedNetwork2021}          & ViT
+                                                                        & 61.37                                    & 80.15          & 86.73          & -              & 54.23        & 72.63 & 79.53 & -     & 43.50 & 67.80 & 77.15 & -     \\
+            CFine~\cite{yanCLIPDrivenFinegrainedTextImage2022}          & ViT
+                                                                        & 69.57                                    & 85.93          & 91.15          & -              & 60.83        & 76.55 & 82.42 & -     & 50.55 & 72.50 & 81.60 & -     \\
+            IVT~\cite{shuSeeFinerSeeMore2022}                           & ViT
+                                                                        & 65.59                                    & 83.11          & 89.21          & -              & 56.04        & 73.60 & 80.22 & -     & 46.70 & 70.00 & 78.80 & -     \\
+            \hline
+            \rowcolor{gray!20}
+            \textbf{Ours}                                               & ViT
+                                                                        & \textbf{79.93}                           & \textbf{92.95} & \textbf{96.47} & \textbf{72.61}
+                                                                        & \textbf{68.68}                           & \textbf{84.29} & \textbf{89.74} & \textbf{41.78}
+                                                                        & \textbf{74.33}                           & \textbf{88.85} & \textbf{92.95} & \textbf{57.68}                                                                        \\
+            \hline
+        \end{tabular}
+    }
+    \vspace{-0.2cm}
+\end{table*}
 
 \subsection{Implementation Details}
-\label{sec:4.2}
-\noindent Datasets and Metrics. We evaluate our method on three standard benchmarks: CUHK-PEDES~\cite{liPersonSearchNatural2017}, ICFG-PEDES~\cite{Zhu}, and RSTPReid~\cite{dingSemanticallySelfAlignedNetwork2021}. We follow their official identity-based splits and report mean Average Precision (mAP) and Rank-k accuracy (R-1, R-5, R-10).
+\label{sec:implementation_details}
+\subsubsection{Datasets and Metrics}
+\label{sec:datasets_metrics}
+We evaluate our method on three standard benchmarks: CUHK-PEDES~\cite{liPersonSearchNatural2017}, ICFG-PEDES~\cite{Zhu}, and RSTPReid~\cite{dingSemanticallySelfAlignedNetwork2021}.
+We follow their official identity-based splits and report mean Average Precision (mAP) and Rank-k accuracy (R-1, R-5, R-10).
 
-\noindent Model and Training. Our model employs a pre-trained `bert-base-uncased` as the text encoder and `vit-base-patch16-224` as the visual encoder. All images are resized to $224 \times 224$ pixels. The BDAM module disentangles visual tokens into 768-dim identity and clothing features. A 2-layer Mamba fusion module (256-dim I/O, 16-dim state, 4-conv kernel) integrates the representations. Dropout is $0.1$ throughout. We use the Adam optimizer (LR $1 \times 10^{-4}$, WD $1 \times 10^{-3}$) with cosine annealing. The total loss combines InfoNCE, triplet, clothing alignment, and HSIC decoupling terms, which are dynamically balanced using GradNorm ($\alpha = 1.5$).
+\subsubsection{Model and Training}
+\label{sec:model_training}
+Our model employs a pre-trained bert-base-uncased as the text encoder and a vit-base-patch16-224 as the visual encoder.
+All images are resized to $224 \times 224$ pixels.
+The BDAM module disentangles visual tokens into 768-dimensional identity and clothing features.
+A 2-layer Mamba fusion module (256-dimensional input/output, 16-dimensional state, 4-convolution kernel) integrates the representations.
+Dropout is $0.1$ throughout.
+We use the Adam optimizer (LR $1 \times 10^{-4}$, WD $1 \times 10^{-3}$) with cosine annealing.
+The total loss combines InfoNCE, triplet, clothing alignment, and HSIC decoupling terms, which are dynamically balanced using GradNorm ($\alpha = 1.5$).
 
-\noindent Data Augmentation and Reporting. We use `clip-vit-base-patch32` and DBSCAN to find style clusters, then use `ChatGPT-4` to generate decoupled identity and clothing descriptions. All experiments are repeated with three random seeds (0, 1, 2), and we report the mean results.
+\subsubsection{Data Augmentation and Reporting}
+\label{sec:data_augmentation}
+We use clip-vit-base-patch32 and DBSCAN to find style clusters, then use ChatGPT-4 to generate decoupled identity and clothing descriptions.
+All experiments are repeated with three random seeds (0, 1, 2), and we report the mean results.
 
 \subsection{Parameter and Efficiency Analysis}
 \label{sec:param_analysis}
 
-\noindent Gate Weight Analysis. We analyze the learned gate weights to validate our design. The BDAM identity weights ($W_{\mathrm{id}}$) exhibit a mean of $0.61$ ($\sigma=0.17$), significantly exceeding clothing weights ($W_{\mathrm{clothing}}=0.38$). This asymmetry confirms that identity-relevant features dominate the representation. Conversely, the fusion module maintains balanced weights (means of $0.52$ and $0.48$) indicating stable cross-modal alignment without modality collapse. Detailed distributions are provided in the supplementary material.
+\noindent Gate Weight Analysis. We analyze the learned gate weights to validate our design. The BDAM identity weights ($W_{\mathrm{id}}$) exhibit a mean of $0.61$ ($\sigma=0.17$), significantly exceeding clothing weights ($W_{\mathrm{clothing}}=0.38$). This asymmetry confirms that identity-relevant features dominate the representation. Conversely, a fusion module maintains balanced weights (means of $0.52$ and $0.48$) indicating stable cross-modal alignment without modality collapse. Detailed distributions are provided in the supplementary material.
 
 \subsection{Ablation Study}
 We conduct systematic ablation studies on CUHK-PEDES to validate each component.
@@ -282,7 +346,7 @@ We conduct systematic ablation studies on CUHK-PEDES to validate each component.
     \vspace{-0.2cm}
 \end{table}
 
-\noindent Disentanglement Module. Table~\ref{tab:ablation_bdam} shows that BDAM yields substantial gains. 
+\subsubsection{Disentanglement Module} Table~\ref{tab:ablation_bdam} shows that BDAM yields substantial gains.
 Removing cross-attention, ablating the gating mechanism, or reducing depth all degrade performance, confirming that semantic interaction and adaptive control are essential for robust disentanglement.
 
 \begin{table}[htbp]
@@ -306,7 +370,7 @@ Removing cross-attention, ablating the gating mechanism, or reducing depth all d
     \vspace{-0.2cm}
 \end{table}
 
-\noindent Fusion Module. Table~\ref{tab:ablation_fusion} confirms the synergy of our fusion components. The Mamba SSM is critical; its removal causes the largest drop, highlighting the value of long-range dependency modeling. The gating and alignment layers provide further essential gains.
+\subsubsection{Fusion Module} Table~\ref{tab:ablation_fusion} confirms the synergy of our fusion components. The Mamba SSM is critical; its removal causes the largest drop, highlighting the value of long-range dependency modeling. The gating and alignment layers provide further essential gains.
 
 \begin{table}[htbp]
     \centering
@@ -331,73 +395,14 @@ Removing cross-attention, ablating the gating mechanism, or reducing depth all d
     \vspace{-0.2cm}
 \end{table}
 
-\noindent Loss and Prompting. Table~\ref{tab:ablation_loss} validates our multi-task loss. InfoNCE and triplet losses are foundational. Crucially, the degradation without alignment or HSIC decoupling losses proves that explicit constraints are necessary to enforce identity-clothing separation. For prompt generation, we found density-based clustering (DBSCAN) significantly outperforms K-Me and random sampling, as it adaptively handles irregular style distributions. Full clustering results and t-SNE visualizations are in the supplementary material.
+\subsubsection{Loss and Prompting} Table~\ref{tab:ablation_loss} validates our multi-task loss. InfoNCE and triplet losses are foundational. Crucially, the degradation without alignment or HSIC decoupling losses proves that explicit constraints are necessary to enforce identity-clothing separation. For prompt generation, we found density-based clustering (DBSCAN) significantly outperforms K-Me and random sampling, as it adaptively handles irregular style distributions. Full clustering results and t-SNE visualizations are in the supplementary material.
 
 \subsection{Comparisons with State-of-the-Art Methods}
-\begin{table*}[t]
-    \centering
-    \caption{Performance comparison with state-of-the-art methods on three benchmark datasets.}
-    \label{tab:sota_comparison}
-    \vspace{-0.3cm}
-    \resizebox{\textwidth}{!}{
-        \begin{tabular}{l|c|cccc|cccc|cccc}
-            \toprule
-            \multirow{2}{*}{\textbf{Method}}
-                                                                        & \multirow{2}{*}{\textbf{Backbone}}
-                                                                        & \multicolumn{4}{c|}{\textbf{CUHK-PEDES}}
-                                                                        & \multicolumn{4}{c|}{\textbf{ICFG-PEDES}}
-                                                                        & \multicolumn{4}{c}{\textbf{RSTPReid}}                                                                                                                              \\
-            \cmidrule(lr){3-6}\cmidrule(lr){7-10}\cmidrule(lr){11-14}
-                                                                        &                                          & \textbf{R-1}   & \textbf{R-5}   & \textbf{R-10}  & \textbf{mAP}
-                                                                        & \textbf{R-1}                             & \textbf{R-5}   & \textbf{R-10}  & \textbf{mAP}
-                                                                        & \textbf{R-1}                             & \textbf{R-5}   & \textbf{R-10}  & \textbf{mAP}                                                                          \\
-            \midrule
-            \multicolumn{14}{l}{\small\textit{Methods with CLIP backbone:}}                                                                                                                                                                  \\
-            \midrule
-            IRRA~\cite{jiangCrossModalImplicitRelation2023}             & CLIP-ViT
-                                                                        & 73.38                                    & 89.93          & 93.71          & 66.10          & 63.36        & 80.82 & 85.82 & 38.06 & 60.20 & 81.30 & 88.20 & 47.17 \\
-            IRLT~\cite{liuCausalityInspiredInvariantRepresentation2024} & CLIP-ViT
-                                                                        & 73.67                                    & 89.71          & 93.57          & 65.94          & 63.57        & 80.57 & 86.32 & 38.34 & 60.51 & 82.85 & 89.71 & 47.64 \\
-            CFAM~\cite{zuoUFineBenchTowardsTextbased2024}               & CLIP-ViT
-                                                                        & 74.46                                    & 90.19          & 94.01          & -              & 64.72        & 81.35 & 86.31 & -     & 61.49 & 82.26 & 89.23 & -     \\
-            Propot~\cite{yanPrototypicalPromptingTexttoimage2024}       & CLIP-ViT
-                                                                        & 74.89                                    & 89.90          & 94.17          & 67.12          & 65.12        & 81.57 & 86.97 & 42.93 & 61.87 & 83.63 & 89.70 & 47.82 \\
-            RDE~\cite{qinNoisyCorrespondenceLearningTexttoImage2024}    & CLIP-ViT
-                                                                        & 75.94                                    & 90.14          & 94.12          & 67.56          & 67.68        & 82.47 & 87.36 & 40.06 & 65.35 & 83.95 & 89.90 & 50.88 \\
-            HAM~\cite{jiangModelingThousandsHuman2025}                  & CLIP-ViT
-                                                                        & 77.99                                    & 91.34          & 95.03          & 69.72          & 69.95        & 83.88 & 88.39 & 42.72 & 72.50 & 87.70 & 91.95 & 55.47 \\
-            \midrule
-            \multicolumn{14}{l}{\small\textit{Methods with ViT backbone:}}                                                                                                                                                                   \\
-            \midrule
-            CPCL~\cite{zhengCPCLCrossModalPrototypical2024}             & ViT
-                                                                        & 70.03                                    & 87.28          & 91.78          & 63.19          & 62.60        & 79.07 & 84.46 & 36.16 & 58.35 & 81.05 & 87.65 & 45.81 \\
-            PDReid~\cite{liPromptDecouplingTexttoImage2024}             & ViT
-                                                                        & 71.59                                    & 87.95          & 92.45          & 65.03          & 60.93        & 77.96 & 84.11 & 36.44 & 56.65 & 77.40 & 84.70 & 45.27 \\
-            SSAN~\cite{dingSemanticallySelfAlignedNetwork2021}          & ViT
-                                                                        & 61.37                                    & 80.15          & 86.73          & -              & 54.23        & 72.63 & 79.53 & -     & 43.50 & 67.80 & 77.15 & -     \\
-            CFine~\cite{yanCLIPDrivenFinegrainedTextImage2022}          & ViT
-                                                                        & 69.57                                    & 85.93          & 91.15          & -              & 60.83        & 76.55 & 82.42 & -     & 50.55 & 72.50 & 81.60 & -     \\
-            IVT~\cite{shuSeeFinerSeeMore2022}                           & ViT
-                                                                        & 65.59                                    & 83.11          & 89.21          & -              & 56.04        & 73.60 & 80.22 & -     & 46.70 & 70.00 & 78.80 & -     \\
-            \midrule
-            \rowcolor{gray!20}
-            \textbf{Ours}                                               & ViT
-                                                                        & \textbf{79.93}                           & \textbf{92.95} & \textbf{96.47} & \textbf{72.61}
-                                                                        & \textbf{68.68}                           & \textbf{84.29} & \textbf{89.74} & \textbf{41.78}
-                                                                        & \textbf{74.33}                           & \textbf{88.85} & \textbf{92.95} & \textbf{57.68}                                                                        \\
-            \bottomrule
-        \end{tabular}
-    }
-    \vspace{-0.2cm}
-\end{table*}
-
 Table~\ref{tab:sota_comparison} compares our method against state-of-the-art approaches. On CUHK-PEDES and RSTPReid, our method establishes new benchmarks, substantially surpassing both ViT-based methods and the strong CLIP-based HAM baseline. On ICFG-PEDES, we remain highly competitive. Notably, this high performance is achieved without leveraging large-scale pre-trained vision-language models, validating that our explicit identity-clothing disentanglement and efficient Mamba fusion provide superior cross-modal alignment through task-specific design.
 
 \section{Conclusion and Limitations}
 \label{sec:conclusion}
-\noindent In this work, we proposed a novel framework to address interference caused by clothing in text-to-image person re-identification. Our approach is centered on feature decoupling guided by a Multimodal Large Language Model. We successfully demonstrated that an MLLM can provide supervision at a fine-grained level to guide our Bidirectional Decoupling Alignment Module. By design, this module explicitly isolates features relevant to identity while actively suppressing interference related to clothing through a combined alignment and orthogonal loss strategy based on a kernel function. Furthermore, our integration of a Mamba State Space Model proved to be an effective and efficient fusion strategy, adept at capturing dependencies between modalities. Our method's effectiveness was validated by achieving new state-of-the-art results on the CUHK-PEDES and RSTPReid benchmarks.
-
-\noindent Nonetheless, limitations remain. These primarily concern the potential for noise in descriptions generated by the MLLM and the need for further optimization for deployment at a large scale. Future work will focus on improving description reliability to mitigate noise and on enhancing inference efficiency. We also plan to explore the framework's applicability to more challenging scenarios, such as person Re-ID involving clothing changes, to further test the robustness of our decoupling mechanism.
+We proposed a framework to address clothing interference in T2I-ReID by using a Multimodal Large Language Model (MLLM) to guide feature decoupling. Our Bidirectional Decoupling Alignment Module (BDAM) leverages MLLM-generated descriptions to isolate identity from clothing features, enforced by an alignment and kernel-based orthogonal loss. A Mamba SSM provides efficient modality fusion. This method achieved new state-of-the-art results on CUHK-PEDES and RSTPReid. Limitations include potential MLLM-generated noise and large-scale deployment overhead. Future work will focus on improving description reliability, enhancing inference efficiency, and testing robustness on clothing-change scenarios.
 
 \bibliographystyle{IEEEbib}
 \bibliography{icme2025references}

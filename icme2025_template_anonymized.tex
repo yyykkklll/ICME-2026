@@ -24,13 +24,13 @@
 \maketitle
 
 \begin{abstract}
-    Text-to-Image Person Re-Identification is critically hampered by clothing-induced interference and a persistent modality gap.
-    We propose a novel framework centered on feature decoupling guided by a Multimodal Large Language Model.
-    We first employ this model to automatically generate separate identity and clothing descriptions for fine-grained supervision.
-    These descriptions guide our core component, the Bidirectional Decoupled Alignment Module, which disentangles visual features into identity and clothing subspaces.
-    A multi-task loss strategy, comprising an alignment loss and a kernel-based orthogonal constraint, enforces this separation.
-    Furthermore, we pioneer the integration of the Mamba state space model as an efficient fusion module, leveraging its linear-time complexity to model long-range dependencies.
-    Comprehensive experiments on benchmark datasets demonstrate our method's superior performance and robustness.
+    Text-to-Image Person Re-Identification is critically hampered by clothing-induced interference and persistent modality gaps. 
+    To address this, we propose a novel framework centered on feature decoupling guided by a Multimodal Large Language Model(MLLM). 
+    Specifically, we introduce a Bidirectional Decoupled Alignment Module that utilizes MLLM-generated descriptions to explicitly disentangle visual features into distinct identity and clothing subspaces. 
+    This separation is rigorously enforced by a multi-task strategy combining clothing alignment loss with kernel-based orthogonal constraints. 
+    Furthermore, we pioneer the integration of the Mamba State Space Model for cross-modal fusion. 
+    Leveraging its linear-time complexity, Mamba models long-range dependencies efficiently, avoiding the quadratic costs of Transformers. 
+    Extensive experiments on CUHK-PEDES, ICFG-PEDES, and RSTPReid benchmarks demonstrate the effectiveness of our method, showing superior performance and robustness against clothing variations compared to leading contemporary approaches.
 \end{abstract}
 \begin{IEEEkeywords}
     Multimodal Learning, Text-to-Image Re-Identification, Feature Decoupling, Semantic Supervision.
@@ -62,7 +62,7 @@ This overlooks the semantic distinction between content relevant to identity (e.
 This coarse-grained treatment forces the model to entangle these factors, often prioritizing salient clothing details over stable identity cues, which blurs identity features and degrades matching robustness.
 
 To address this challenge, we propose a novel framework with explicit, fine-grained semantic supervision.
-Inspired by the style-clustering paradigm~\cite{jiangModelingThousandsHuman2025}, our approach employs Multimodal Large Language Model (MLLM) to guide feature decoupling by automatically generating distinct descriptions for identity and clothing.
+Inspired by the style-clustering paradigm~\cite{jiangModelingThousandsHuman2025}, our approach employs MLLM to guide feature decoupling by automatically generating distinct descriptions for identity and clothing.
 These decoupled annotations provide precise supervision for our Bidirectional Decoupled Alignment Module (BDAM) to meticulously separate and align identity and clothing information.
 This separation is enforced by a multi-task loss strategy, including an alignment loss and an HSIC-based orthogonality constraint.
 Furthermore, we pioneer the integration of the Mamba state space model (SSM) as an efficient fusion module, adept at capturing long-range cross-modal dependencies with linear complexity.
@@ -150,7 +150,7 @@ HSIC measures the statistical dependence between features; minimizing this value
 
 \subsection{Feature Fusion}
 We introduce the Mamba SSM for efficient, semantic-sensitive feature fusion. 
-The core objective is to preserve the semantic integrity of the purified identity features from both image and text, enabling a fusion that is robust to clothing variations isolated by the BDAM. As illustrated in Figure~\ref{fig:fusion_module}, the process begins with an FFN performing dimensional alignment on the decoupled visual features $f_{\text{id}}^{\text{i}}$ and the textual features $f_{\text{id}}^{t}$ to generate $f_{\text{img}}$ and $f_{\text{txt}}$.
+The core objective is to preserve the semantic integrity of the purified identity features from both image and text, enabling a fusion that is robust to clothing variations isolated by the BDAM. As illustrated in Fig.~\ref{fig:fusion_module}, the process begins with an FFN performing dimensional alignment on the decoupled visual features $f_{\text{id}}^{\text{i}}$ and the textual features $f_{\text{id}}^{t}$ to generate $f_{\text{img}}$ and $f_{\text{txt}}$.
 
 \begin{figure}[t]
     \centering

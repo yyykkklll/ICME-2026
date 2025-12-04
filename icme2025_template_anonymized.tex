@@ -25,61 +25,65 @@
 
 \begin{abstract}
     Text-to-Image Person Re-Identification faces significant challenges from clothing-induced interference and persistent modality gaps. 
-    To address this, we propose a novel framework centered on feature decoupling guided by a Multimodal Large Language Model (MLLM). 
-    Specifically, we introduce a Bidirectional Decoupled Alignment Module (BDAM) that leverages MLLM-generated descriptions to explicitly disentangle visual features into distinct identity and clothing subspaces. 
-    This separation is enforced by a multi-task strategy combining clothing alignment loss with kernel-based orthogonal constraints. 
-    Furthermore, we pioneer the integration of the Mamba State Space Model for cross-modal fusion. 
-    Leveraging its linear-time complexity, Mamba models long-range dependencies efficiently, avoiding the quadratic costs of Transformers. 
+    To address this, we propose a novel and robust person re-identification framework. 
+    By leveraging a Multimodal Large Language Model (MLLM), it effectively decouples person identity from other interference features, thereby achieving accurate person identification.
+    Specifically, we introduce a Bidirectional Decoupled Alignment Module (BDAM). 
+    By employing MLLM-generated descriptions as fine-grained semantic supervision, it explicitly disentangles visual features into distinct identity and clothing subspaces. 
+    This decoupling strategy is enforced by a multi-objective regularization term combining clothing alignment loss with kernel-based orthogonal constraints.
+    Furthermore, our network is based on Mamba, which efficiently models long-range dependencies within image content, avoiding the quadratic costs associated with Transformers.
     Extensive experiments on CUHK-PEDES, ICFG-PEDES, and RSTPReid benchmarks demonstrate the effectiveness of our method, showing superior performance and robustness against clothing variations compared to leading contemporary approaches.
 \end{abstract}
+
 \begin{IEEEkeywords}
     Multimodal Learning, Text-to-Image Re-Identification, Feature Decoupling, Semantic Supervision.
 \end{IEEEkeywords}
 
 \section{Introduction}
 Text-to-Image Person Re-Identification (T2I-ReID) retrieves a target pedestrian from a large-scale image gallery given a natural-language description~\cite{dingSemanticallySelfAlignedNetwork2021}.
-It is valuable for video surveillance~\cite{bukhariLanguageVisionBased2023}, intelligent security~\cite{galiyawalaPersonRetrievalSurveillance2021}, public safety, and social media.
+This technology is valuable for video surveillance~\cite{bukhariLanguageVisionBased2023}, intelligent security~\cite{galiyawalaPersonRetrievalSurveillance2021}, public safety, and social media.
 Despite recent progress, practical deployment remains challenging due to image factors (pose, viewpoint, illumination) obscuring identity cues and a persistent modality gap hampering fusion.
-These issues are exacerbated at the fine-grained level, where semantic alignment is particularly difficult.
+These issues are exacerbated at the fine-grained level, where semantic alignment is particularly difficult.\cite{zuoUFineBenchTowardsTextbased2024}
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=\columnwidth]{Figure1}
-    \caption{Comparison of ReID methods. (a) \textit{Traditional}: Entangled global feature fusion. (b) \textit{Proposed (BDAM)}: MLLM-guided decoupling of identity and clothing.}
+    \vspace{-4mm}
+    \caption{Comparison of ReID methods. (a) Entangled global feature fusion. (b) \textit{Our method}: MLLM-guided decoupling of identity and clothing.}
     \label{fig:figure1}
 \end{figure}
 
-A core challenge in T2I-ReID is the semantic gap between images and text.
-Early work attempted to reduce this discrepancy by projecting global visual and textual features into a shared space~\cite{wangLearningDeepStructurePreserving2016}, but struggled with high intra-class and low inter-class variance.
-To overcome this, subsequent studies introduced feature disentanglement~\cite{gaoContextualNonLocalAlignment2021}.
-These are broadly explicit, using auxiliary modules for part-alignment~\cite{wangViTAAVisualTextualAttributes2020}, or implicit, using regularizers to associate noun phrases with regions~\cite{jiangCrossModalImplicitRelation2023}.
-This progression highlights that distinguishing identity-relevant from irrelevant semantics is essential for advancing T2I-ReID.
+Due to noisy environments and human morphological variations, a core challenge in T2I-ReID is the substantial semantic gap between images and text. 
+Early work projected global visual and textual features into a shared space~\cite{wangLearningDeepStructurePreserving2016}, but suffered from high intra-class and low inter-class variance. 
+To mitigate this, subsequent studies adopted feature disentanglement to align latent semantics, broadly falling into two categories: explicit methods using auxiliary modules for part-level alignment~\cite{wangViTAAVisualTextualAttributes2020}, and implicit approaches leveraging regularizers to associate noun phrases with image regions~\cite{jiangCrossModalImplicitRelation2023}. 
+This evolution underscores the importance of separating identity-relevant from irrelevant semantics for advancing T2I-ReID.
 
 This pursuit of disentanglement has been propelled by powerful backbones. 
-Models employing ViT~\cite{dosovitskiyImageWorth16x162021} capture fine-grained details, while methods leveraging CLIP~\cite{yaoFILIPFinegrainedInteractive2021} learn a well-aligned joint space.
+For instance, models employing ViT~\cite{dosovitskiyImageWorth16x162021} capture fine-grained details, while methods leveraging CLIP~\cite{yaoFILIPFinegrainedInteractive2021} learn a well-aligned joint space.
 However, CLIP-based methods typically rely on global image-text alignment. 
 This holistic approach often fails to distinguish identity-stable features (e.g., body shape) from transient nuisances (e.g., clothing), leading to entangled representations where salient clothing details overshadow stable identity cues.
-In contrast, our framework demonstrates that precise, semantic-aware supervision is more critical than raw pre-training scale.
+In contrast, as illustrated in Fig.~\ref{fig:figure1}, our framework demonstrates that precise, semantic-aware supervision is more critical than raw pre-training scale.
 Despite these advances, a critical limitation persists: both lines of work commonly treat the textual description holistically.
 This overlooks the semantic distinction between content relevant to identity and content irrelevant to identity.
 This coarse-grained treatment forces the model to entangle these factors, often prioritizing salient clothing details over stable identity cues, which blurs identity features and degrades matching robustness.
 
-To address this challenge, we propose a novel framework with explicit, fine-grained semantic supervision.
-Inspired by the style-clustering paradigm~\cite{jiangModelingThousandsHuman2025}, our approach employs MLLM to guide feature decoupling by automatically generating distinct descriptions for identity and clothing.
+To address this challenge, we propose a novel framework with explicit, fine-grained semantic supervision. 
+However, a primary obstacle is that existing datasets lack specific annotations separating identity attributes from clothing details. 
+To bridge this gap, we introduce a Style-Guided Semantic Enhancement strategy. 
+Drawing inspiration from the style-clustering paradigm~\cite{jiangModelingThousandsHuman2025}, this strategy leverages an MLLM to automatically generate distinct descriptions for identity and clothing.
 These decoupled annotations provide precise supervision for our Bidirectional Decoupled Alignment Module (BDAM) to meticulously separate and align identity and clothing information.
-This separation is enforced by a multi-task loss strategy, including an alignment loss and an HSIC-based orthogonality constraint.
-Furthermore, we pioneer the integration of the Mamba state space model (SSM) as an efficient fusion module, adept at capturing long-range cross-modal dependencies with linear complexity.
+This separation is enforced by a multi-objective loss strategy, including an alignment loss and an HSIC-based orthogonality constraint.
+Furthermore, we pioneer the integration of the Mamba as an efficient fusion module, adept at capturing long-range cross-modal dependencies with linear complexity.
 
 Our main contributions are summarized as follows:
 \begin{itemize}
-    \item We propose an automatic prompt construction pipeline that combines style clustering with an MLLM to produce fine-grained, decoupled identity and clothing descriptions.
-    \item We design the Bidirectional Decoupled Alignment Module (BDAM), which achieves precise decoupling and alignment reinforced by a multi-task loss strategy combining an alignment loss and an orthogonality constraint based on HSIC.
-    \item We introduce the novel integration of a Mamba SSM fusion module that models long-range cross-modal dependencies with linear complexity.
+    \item We introduce a Style-Guided Semantic Enhancement strategy that leverages clustering and MLLMs to generate fine-grained, decoupled identity and clothing descriptions, providing precise supervision for explicit feature disentanglement.
+    \item We design the Bidirectional Decoupled Alignment Module (BDAM), which achieves precise decoupling and alignment reinforced by a multi-objective loss strategy combining an alignment loss and an orthogonality constraint based on HSIC.
+    \item We empirically validate the proposed Mamba-based fusion strategy through comprehensive experiments, which demonstrate its capability to efficiently model cross-modal dependencies and outperform contemporary methods in handling clothing interference.
 \end{itemize}
 
 \section{Related Work}
 \label{sec:related_work}
-\subsection{Feature Disentanglement}
+\subsection{Feature Decoupling for Person Re-Identification}
 Feature disentanglement~\cite{wangDisentangledRepresentationLearning2024} aims to separate semantically distinct factors to improve generalization. 
 Early work used generative models~\cite{liuMultitaskAdversarialNetwork2018}, while modern strategies employ adversarial training~\cite{liuMultitaskAdversarialNetwork2018}, metric learning~\cite{chengDisentangledFeatureRepresentation2021}, or orthogonal projections~\cite{materzynskaDisentanglingVisualWritten2022}. 
 In the ReID domain, this is used to separate identity-relevant signals from nuisances~\cite{liDisentanglingIdentityFeatures2024,azadActivityBiometricsPersonIdentification2024}, such as occlusion~\cite{cuiProFDPromptGuidedFeature2024} or clothing changes~\cite{liDisentanglingIdentityFeatures2024}.
@@ -98,13 +102,14 @@ Other approaches like dynamic fusion~\cite{fengKnowledgeGuidedDynamicModality202
 
 Contemporary evidence suggests that accuracy improves only when semantic disentanglement and efficient fusion advance in tandem~\cite{zhuDSSLDeepSurroundingsperson2021}. 
 Practically, an ideal fusion module should respect factorized semantics (i.e., identity and clothing) and capture long-range cross-modal dependencies with linear complexity~\cite{shuSeeFinerSeeMore2022}. 
-This motivates our design: BDAM supplies factor-aware representations, while a Mamba SSM fusion module models long-horizon interactions with linear complexity, enabling precise alignment without the memory and efficiency bottlenecks of standard Transformers.
+This motivates our design: BDAM supplies factor-aware representations, while a Mamba fusion module models long-horizon interactions with linear complexity, enabling precise alignment without the memory and efficiency bottlenecks of standard Transformers.
 
 \section{METHODOLOGY}
 \label{sec:method}
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=\textwidth]{figure2_2_2.pdf}
+    \includegraphics[width=\textwidth]{Figure2.pdf}
+    \vspace{-4mm}
     \caption{Overview of the proposed framework. An MLLM generates identity ($f^t_{\mathrm{id}}$) and clothing ($f^t_{\mathrm{clo}}$) descriptions to supervise the BDAM. The BDAM module disentangles the input visual feature $f_i$ into identity ($f_{\mathrm{id}}$) and clothing ($f_{\mathrm{clo}}$) features, which are optimized via contrastive and decoupling losses. Finally, the fusion module integrates the visual and textual identity features ($f_{\mathrm{id}}$ and $f_{\mathrm{id}}^t$).}
     \label{fig:figure2}
 \end{figure*}
@@ -116,18 +121,19 @@ Given an image $I \in \mathbb{R}^{B \times C \times H \times W}$, a visual encod
 Concurrently, we use an MLLM to generate separate identity and clothing descriptions, which a text encoder encodes into $f^t_{\mathrm{id}}$ and $f^t_{\mathrm{clo}}$.
 The BDAM leverages these textual features to guide the disentanglement of $f_i$.
 To enforce this separation, we employ two losses: an alignment loss ($\mathcal{L}_{\mathrm{aln}}$) to supervise the visual clothing features using clothing descriptions, and an HSIC-based loss to ensure orthogonality.
-Finally, the Mamba SSM efficiently fuses the disentangled visual identity and textual semantics, enhancing the model's overall representation.
+Finally, the Mamba efficiently fuses the disentangled visual identity and textual semantics, enhancing the model's overall representation.
 
 \subsection{Semantic Enhancement}
 \label{sec:semantic}
 \begin{figure}[ht]
     \centering
     \includegraphics[width=\columnwidth]{MLLM.pdf}
+    \vspace{-4mm}
     \caption{Overview of the offline pipeline using an MLLM to generate decoupled identity and clothing descriptions. Style prompts are derived via CLIP and DBSCAN to enhance diversity.}
     \label{fig:mllm_pipeline}
 \end{figure}
 
-We employ an MLLM to automatically generate fine-grained identity and clothing descriptions for pedestrians, reducing the burden of manual annotation and enriching the available supervision. 
+We employ an MLLM (specifically, GPT-4) to automatically generate fine-grained identity and clothing descriptions for pedestrians, reducing the burden of manual annotation and enriching the available supervision. 
 Fig.~\ref{fig:mllm_pipeline} illustrates this generation pipeline. Inspired by prior work on modeling annotator styles~\cite{jiangModelingThousandsHuman2025}, we first derive style categories to guide the MLLM's generation tone.
 
 To achieve this, we use the CLIP text encoder to embed original descriptions and then cluster these style embeddings with DBSCAN. 
@@ -171,6 +177,7 @@ As illustrated in Fig.~\ref{fig:fusion_module}, the process begins with an FFN p
 \begin{figure}[t]
     \centering
     \includegraphics[width=\linewidth]{Fusion.pdf}
+    \vspace{-4mm}
     \caption{Architecture of the Mamba Fusion Module, which fuses visual ($f_{\text{id}}^{\text{i}}$) and textual ($f_{\text{id}}^{\text{t}}$) identity features while discarding clothing features ($f_{\text{clo}}^{\text{i}}$).}
     \label{fig:fusion_module}
 \end{figure}
@@ -389,11 +396,32 @@ The Mamba SSM is critical; its removal causes the largest drop, highlighting the
     \vspace{-0.2cm}
 \end{table}
 
-\subsubsection{Loss and Prompting} Table~\ref{tab:ablation_loss} validates our multi-task loss. 
+\subsubsection{Loss and Prompting} Table~\ref{tab:ablation_loss} validates our multi-objective loss. 
 InfoNCE and triplet losses are foundational. 
 Crucially, the degradation without alignment or HSIC decoupling losses proves that explicit constraints are necessary to enforce identity-clothing separation. 
 For prompt generation, we found density-based clustering (DBSCAN) significantly outperforms K-Me and random sampling, as it adaptively handles irregular style distributions. 
 Full clustering results and t-SNE visualizations are in the supplementary material.
+
+\subsection{Robustness Mechanism Analysis}
+\label{sec:robustness_analysis}
+
+To verify robustness against clothing variations, we conduct an ablation on the cloth-changing RSTPReid dataset, focusing on two key designs: \textit{Explicit Decoupling} via HSIC and \textit{Explicit Exclusion} of clothing features. We compare the full model against two variants: \textit{w/o Decoupling Loss} and \textit{w/ Clothing Fusion} (intentionally re-introducing clothing features into the fusion module).
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{robustness_ablation.pdf}
+    \caption{\textbf{Robustness analysis on RSTPReid.} The performance degradation in variants lacking decoupling or retaining clothing features validates the efficacy of our interference-removal strategy.}
+    \label{fig:robustness_ablation}
+\end{figure}
+
+Results in Fig.~\ref{fig:robustness_ablation} reveal two key insights. 
+First, regarding \textit{clothing features as interference}, the \textit{w/ Clothing Fusion} variant suffers significant degradation across all metrics. 
+This empirically confirms that in cloth-changing scenarios, visual clothing features act as confounding noise. 
+By structurally discarding them, our method ensures reliance on stable identity semantics. 
+
+Second, regarding how \textit{decoupling ensures precision}, the \textit{w/o Decoupling Loss} variant shows a notable drop in Rank-1 accuracy, despite relatively stable Rank-10 performance. 
+This disparity indicates that while entangled features suffice for coarse retrieval, the HSIC constraint is indispensable for the semantic purity required for precise top-rank matching. 
+Thus, our robustness stems from the synergy of mathematically enforcing independence and structurally blocking interference.
 
 \subsection{Comparisons with State-of-the-Art Methods}
 Table~\ref{tab:sota_comparison} compares our method against state-of-the-art approaches. 
